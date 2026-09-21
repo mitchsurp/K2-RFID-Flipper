@@ -117,6 +117,17 @@ static K2RfidApp* k2_rfid_app_alloc(void) {
 static void k2_rfid_app_free(K2RfidApp* app) {
     if (!app) return;
 
+    /* Stop and free emulation listener if active */
+    if (app->listener) {
+        nfc_listener_stop(app->listener);
+        nfc_listener_free(app->listener);
+        app->listener = NULL;
+    }
+    if (app->emulate_data) {
+        mf_classic_free(app->emulate_data);
+        app->emulate_data = NULL;
+    }
+
     /* Free worker */
     k2_worker_free(app->worker);
 

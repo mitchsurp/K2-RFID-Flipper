@@ -18,6 +18,7 @@ struct K2Worker {
 
     K2SpoolConfig config;
     K2SpoolInfo last_info;
+    volatile bool is_busy;
 };
 
 static uint64_t bytes_to_key_num(const uint8_t key[6]) {
@@ -28,13 +29,18 @@ static uint64_t bytes_to_key_num(const uint8_t key[6]) {
     return val;
 }
 
-static NfcCommand k2_emulate_callback(NfcGenericEvent event, void* context) {
-    UNUSED(event);
-    UNUSED(context);
-    return NfcCommandContinue;
-}
+void k2_prepare_mf_classic_data(const K2SpoolConfig* config, const uint8_t* optional_uid, MfClassicData* data) {
+    furi_check(config);
+    furi_check(data);
 
-static void k2_prepare_mf_classic_data(const K2SpoolConfig* config, const uint8_t* optional_uid, MfClassicData* data) {
+    /* Zero out all data and base ISO14443-3A data to prevent any garbage memory */
+    Iso14443_3aData* iso = data->iso14443_3a_data;
+    memset(data, 0, sizeof(MfClassicData));
+    data->iso14443_3a_data = iso;
+    if (iso) {
+        memset(iso, 0, sizeof(Iso14443_3aData));
+    }
+
     uint8_t uid[4];
     if (optional_uid) {
         memcpy(uid, optional_uid, 4);
@@ -56,7 +62,6 @@ static void k2_prepare_mf_classic_data(const K2SpoolConfig* config, const uint8_
     data->type = MfClassicType1k;
     mf_classic_set_uid(data, uid, 4);
 
-    Iso14443_3aData* iso = data->iso14443_3a_data;
     if (iso) {
         iso->atqa[0] = 0x04;
         iso->atqa[1] = 0x00;
@@ -65,6 +70,7 @@ static void k2_prepare_mf_classic_data(const K2SpoolConfig* config, const uint8_
 
     /* Block 0: Manufacturer block */
     MfClassicBlock b0;
+    memset(b0.data, 0, 16);
     b0.data[0] = uid[0];
     b0.data[1] = uid[1];
     b0.data[2] = uid[2];
@@ -252,6 +258,7 @@ static int32_t k2_worker_thread_func(void* context) {
         }
 
         if (mode == K2WorkerModeScan) {
+            worker->is_busy = true;
             Iso14443_3aError iso_err = iso14443_3a_poller_sync_read(worker->nfc, iso3a);
             if (iso_err == Iso14443_3aErrorNone && iso3a->uid_len >= 4) {
                 if (worker->callback) worker->callback(K2WorkerEventCardDetected, worker->callback_context);
@@ -309,15 +316,19 @@ static int32_t k2_worker_thread_func(void* context) {
                     worker->mode = K2WorkerModeIdle;
                     furi_mutex_release(worker->mutex);
 
+                    worker->is_busy = false;
                     if (worker->callback) worker->callback(K2WorkerEventSuccess, worker->callback_context);
                 } else {
+                    worker->is_busy = false;
                     if (worker->callback) worker->callback(K2WorkerEventAuthFailed, worker->callback_context);
                     furi_delay_ms(500);
                 }
             } else {
+                worker->is_busy = false;
                 furi_delay_ms(100);
             }
         } else if (mode == K2WorkerModeWrite) {
+            worker->is_busy = true;
             Iso14443_3aError iso_err = iso14443_3a_poller_sync_read(worker->nfc, iso3a);
             if (iso_err == Iso14443_3aErrorNone && iso3a->uid_len >= 4) {
                 if (worker->callback) worker->callback(K2WorkerEventCardDetected, worker->callback_context);
@@ -379,15 +390,19 @@ static int32_t k2_worker_thread_func(void* context) {
                     worker->mode = K2WorkerModeIdle;
                     furi_mutex_release(worker->mutex);
 
+                    worker->is_busy = false;
                     if (worker->callback) worker->callback(K2WorkerEventSuccess, worker->callback_context);
                 } else {
+                    worker->is_busy = false;
                     if (worker->callback) worker->callback(K2WorkerEventWriteFailed, worker->callback_context);
                     furi_delay_ms(500);
                 }
             } else {
+                worker->is_busy = false;
                 furi_delay_ms(100);
             }
         } else if (mode == K2WorkerModeFormat) {
+            worker->is_busy = true;
             Iso14443_3aError iso_err = iso14443_3a_poller_sync_read(worker->nfc, iso3a);
             if (iso_err == Iso14443_3aErrorNone && iso3a->uid_len >= 4) {
                 if (worker->callback) worker->callback(K2WorkerEventCardDetected, worker->callback_context);
@@ -431,43 +446,19 @@ static int32_t k2_worker_thread_func(void* context) {
                     worker->mode = K2WorkerModeIdle;
                     furi_mutex_release(worker->mutex);
 
+                    worker->is_busy = false;
                     if (worker->callback) worker->callback(K2WorkerEventSuccess, worker->callback_context);
                 } else {
+                    worker->is_busy = false;
                     if (worker->callback) worker->callback(K2WorkerEventFormatFailed, worker->callback_context);
                     furi_delay_ms(500);
                 }
             } else {
+                worker->is_busy = false;
                 furi_delay_ms(100);
             }
-        } else if (mode == K2WorkerModeEmulate) {
-            furi_mutex_acquire(worker->mutex, FuriWaitForever);
-            K2SpoolConfig cfg = worker->config;
-            furi_mutex_release(worker->mutex);
-
-            MfClassicData* mf_data = mf_classic_alloc();
-            k2_prepare_mf_classic_data(&cfg, NULL, mf_data);
-
-            NfcListener* listener = nfc_listener_alloc(worker->nfc, NfcProtocolMfClassic, (const NfcDeviceData*)mf_data);
-            if (listener) {
-                nfc_listener_start(listener, k2_emulate_callback, worker);
-                if (worker->callback) worker->callback(K2WorkerEventEmulating, worker->callback_context);
-
-                while (true) {
-                    furi_mutex_acquire(worker->mutex, FuriWaitForever);
-                    K2WorkerMode cur = worker->mode;
-                    furi_mutex_release(worker->mutex);
-
-                    if (cur != K2WorkerModeEmulate) break;
-                    furi_delay_ms(100);
-                }
-
-                nfc_listener_stop(listener);
-                nfc_listener_free(listener);
-            }
-            mf_classic_free(mf_data);
-
-            if (worker->callback) worker->callback(K2WorkerEventStopped, worker->callback_context);
         } else {
+            worker->is_busy = false;
             furi_delay_ms(100);
         }
     }
@@ -498,6 +489,10 @@ void k2_worker_free(K2Worker* worker) {
     if (!worker) return;
 
     k2_worker_stop(worker);
+
+    furi_mutex_acquire(worker->mutex, FuriWaitForever);
+    worker->mode = K2WorkerModeStop;
+    furi_mutex_release(worker->mutex);
 
     furi_thread_join(worker->thread);
     furi_thread_free(worker->thread);
@@ -537,19 +532,20 @@ void k2_worker_start_format(K2Worker* worker) {
     furi_mutex_release(worker->mutex);
 }
 
-void k2_worker_start_emulate(K2Worker* worker, const K2SpoolConfig* config) {
-    if (!worker) return;
-    furi_mutex_acquire(worker->mutex, FuriWaitForever);
-    if (config) worker->config = *config;
-    worker->mode = K2WorkerModeEmulate;
-    furi_mutex_release(worker->mutex);
-}
-
 void k2_worker_stop(K2Worker* worker) {
     if (!worker) return;
     furi_mutex_acquire(worker->mutex, FuriWaitForever);
     worker->mode = K2WorkerModeIdle;
     furi_mutex_release(worker->mutex);
+
+    while (worker->is_busy) {
+        furi_delay_ms(10);
+    }
+}
+
+Nfc* k2_worker_get_nfc(K2Worker* worker) {
+    if (!worker) return NULL;
+    return worker->nfc;
 }
 
 const K2SpoolInfo* k2_worker_get_last_info(const K2Worker* worker) {

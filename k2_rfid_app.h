@@ -58,6 +58,10 @@ struct K2RfidApp {
     Widget* widget;
     TextInput* text_input;
 
+    /* Emulation */
+    NfcListener* listener;
+    MfClassicData* emulate_data;
+
     /* Current spool configuration */
     K2SpoolConfig config;
     size_t printer_idx;

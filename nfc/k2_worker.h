@@ -16,7 +16,6 @@ typedef enum {
     K2WorkerModeScan,
     K2WorkerModeWrite,
     K2WorkerModeFormat,
-    K2WorkerModeEmulate,
     K2WorkerModeStop,
 } K2WorkerMode;
 
@@ -27,8 +26,6 @@ typedef enum {
     K2WorkerEventReadFailed,
     K2WorkerEventWriteFailed,
     K2WorkerEventFormatFailed,
-    K2WorkerEventEmulating,
-    K2WorkerEventStopped,
 } K2WorkerEvent;
 
 typedef void (*K2WorkerCallback)(K2WorkerEvent event, void* context);
@@ -43,10 +40,13 @@ void k2_worker_set_callback(K2Worker* worker, K2WorkerCallback callback, void* c
 void k2_worker_start_scan(K2Worker* worker);
 void k2_worker_start_write(K2Worker* worker, const K2SpoolConfig* config);
 void k2_worker_start_format(K2Worker* worker);
-void k2_worker_start_emulate(K2Worker* worker, const K2SpoolConfig* config);
 void k2_worker_stop(K2Worker* worker);
 
+Nfc* k2_worker_get_nfc(K2Worker* worker);
 const K2SpoolInfo* k2_worker_get_last_info(const K2Worker* worker);
+
+/* MIFARE Classic tag data builder */
+void k2_prepare_mf_classic_data(const K2SpoolConfig* config, const uint8_t* optional_uid, MfClassicData* data);
 
 /* Storage helpers for .nfc files */
 bool k2_worker_save_spool_to_nfc(const K2SpoolConfig* config, const uint8_t* optional_uid, char* out_filepath, size_t out_filepath_size);

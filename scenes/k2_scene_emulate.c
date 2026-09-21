@@ -1,18 +1,12 @@
 #include "../k2_rfid_app.h"
 #include "k2_scene.h"
 
-static void k2_scene_emulate_worker_callback(K2WorkerEvent event, void* context) {
-    K2RfidApp* app = context;
-    if (event == K2WorkerEventEmulating) {
-        view_dispatcher_send_custom_event(app->view_dispatcher, K2CustomEventEmulating);
-    } else if (event == K2WorkerEventStopped) {
-        view_dispatcher_send_custom_event(app->view_dispatcher, K2CustomEventStopped);
-    }
-}
-
 void k2_scene_emulate_on_enter(void* context) {
     K2RfidApp* app = context;
     Popup* popup = app->popup;
+
+    /* Ensure worker polling tasks are stopped */
+    k2_worker_stop(app->worker);
 
     k2_rfid_app_sync_config(app);
 
@@ -24,7 +18,7 @@ void k2_scene_emulate_on_enter(void* context) {
     FuriString* str = furi_string_alloc();
     furi_string_printf(
         str,
-        "%s\n%s - %s\nHold against CFS slot\nPress Back to Stop",
+        "%s\n%s - %s\nHold against CFS slot\nPress Back to Exit",
         mat_name,
         col_name,
         weight);
@@ -34,10 +28,20 @@ void k2_scene_emulate_on_enter(void* context) {
     popup_set_text(popup, furi_string_get_cstr(str), 64, 20, AlignCenter, AlignTop);
     furi_string_free(str);
 
-    k2_worker_set_callback(app->worker, k2_scene_emulate_worker_callback, app);
-    k2_worker_start_emulate(app->worker, &app->config);
+    /* Allocate and prepare MIFARE Classic tag data */
+    app->emulate_data = mf_classic_alloc();
+    k2_prepare_mf_classic_data(&app->config, NULL, app->emulate_data);
 
-    notification_message(app->notifications, &sequence_blink_yellow_10);
+    /* Allocate and start NFC listener directly on app thread */
+    app->listener = nfc_listener_alloc(
+        k2_worker_get_nfc(app->worker),
+        NfcProtocolMfClassic,
+        (const NfcDeviceData*)app->emulate_data);
+    if(app->listener) {
+        nfc_listener_start(app->listener, NULL, NULL);
+    }
+
+    notification_message(app->notifications, &sequence_blink_start_yellow);
     view_dispatcher_switch_to_view(app->view_dispatcher, K2ViewPopup);
 }
 
@@ -49,7 +53,17 @@ bool k2_scene_emulate_on_event(void* context, SceneManagerEvent event) {
 
 void k2_scene_emulate_on_exit(void* context) {
     K2RfidApp* app = context;
-    k2_worker_stop(app->worker);
-    k2_worker_set_callback(app->worker, NULL, NULL);
+
+    if(app->listener) {
+        nfc_listener_stop(app->listener);
+        nfc_listener_free(app->listener);
+        app->listener = NULL;
+    }
+    if(app->emulate_data) {
+        mf_classic_free(app->emulate_data);
+        app->emulate_data = NULL;
+    }
+
+    notification_message(app->notifications, &sequence_blink_stop);
     popup_reset(app->popup);
 }
