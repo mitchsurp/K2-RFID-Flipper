@@ -7,7 +7,7 @@ App(
     fap_category="NFC",
     fap_icon="k2_rfid.png",
     fap_description="Creality K2/K1/CFS RFID Spool Reader, Writer & Emulator",
-    fap_author="Antigravity",
+    fap_author="mitchsurp",
     fap_weburl="https://github.com/DnG-Crafts/K2-RFID",
     fap_version="1.0",
 )
