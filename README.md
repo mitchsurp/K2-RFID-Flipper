@@ -66,6 +66,63 @@ Creality CFS uses **MIFARE Classic 1K** RFID tags:
 
 ---
 
+## How to Use
+
+### 1. Scanning an Existing Spool Tag
+1. From the main menu, select **Scan Spool Tag**.
+2. Hold the back of your Flipper Zero against the RFID sticker on the spool.
+3. Once detected, the Flipper will vibrate, beep, and display the decoded spool details:
+   - Material Name & Brand
+   - Material Type & Target Printer
+   - Color Hex & matched Color Name
+   - Spool Weight / Length
+   - UID, Serial Number, Batch, and Date
+4. From the details screen, you have quick action buttons:
+   - **Save (Left button)**: Saves the tag to `/ext/nfc/CFS/` on your SD card as a `.nfc` file.
+   - **Emul (Center button)**: Starts real-time NFC emulation of this spool.
+   - **Edit (Right button)**: Loads this spool's settings into the configuration editor so you can duplicate or modify it.
+
+### 2. Configuring Spool Settings
+1. From the main menu, select **Spool Settings** (or click **Edit** from a scanned tag).
+2. Use the Left and Right D-pad arrows to change:
+   - **Printer**: Select `K2`, `K1`, or `HI`.
+   - **Filament**: Choose from 66 official materials (Hyper PLA, Hyper PETG, CR-ABS, etc.).
+   - **Color**: Select from preset colors (White, Black, Gray, Red, Blue, Yellow, etc.).
+   - **Weight**: Choose between `1 KG` (330m), `750 G`, `600 G`, `500 G`, or `250 G`.
+   - **Serial**: Press **OK** to randomize the 6-digit serial number.
+3. Select **Done** to return to the main menu.
+
+### 3. Writing to Physical Tags
+
+> [!IMPORTANT]
+> **Both tags (one on each side of the spool) must be written for the spool to work properly in Creality readers!**
+>
+> Official Creality filament spools feature **two identical RFID tags**—one affixed to the left flange and one to the right flange. The Creality CFS RFID reader antennas scan the side facing the slot's RFID sensor. If you only write a single tag and insert the spool facing the other direction, the CFS reader will not detect the spool. Always program two tags per spool!
+
+**Step-by-step writing workflow:**
+1. Configure your filament in **Spool Settings** (or scan an original tag and click **Edit**).
+2. Select **Write Spool Tag** from the main menu.
+3. Hold your first blank tag (Tag A) against the back of the Flipper. Wait for the green LED and the `Success! Spool tag written` message.
+4. Press **Back** to return to the main menu.
+5. Select **Write Spool Tag** again.
+6. Hold your second blank tag (Tag B) against the back of the Flipper until written.
+7. Affix one tag to each side of your filament spool in the designated tag area.
+
+### 4. Real-Time Emulation (No Physical Tags Needed)
+1. Configure your spool in **Spool Settings**, or load an existing spool from **Saved Spools (.nfc)**, or scan a tag.
+2. Select **Emulate Spool** from the main menu (or press **Emul** from the tag info screen).
+3. Hold the back of your Flipper Zero against the active CFS reader slot on your Creality K2 or K1.
+4. The CFS reader will detect the spool parameters as if an original spool were installed.
+5. Press **Back** on the Flipper when finished to stop emulation.
+
+### 5. Formatting / Blanking a Tag
+If you need to wipe a previously used CFS tag or repurpose a tag:
+1. Select **Format / Erase Tag** from the main menu.
+2. Hold the tag to the back of the Flipper Zero.
+3. The app wipes Sectors 1 and 2 with zeros and restores trailer block 7 back to the standard factory transport key (`FF FF FF FF FF FF`).
+
+---
+
 ## Installation
 
 ### Method 1: Pre-built FAP
