@@ -10,6 +10,7 @@ typedef enum {
     SubmenuIndexSavedSpools,
     SubmenuIndexFormat,
     SubmenuIndexAbout,
+    SubmenuIndexExit,
 } SubmenuIndex;
 
 static void k2_scene_main_menu_callback(void* context, uint32_t index) {
@@ -32,6 +33,7 @@ void k2_scene_main_menu_on_enter(void* context) {
     submenu_add_item(submenu, "Saved Spools (.nfc)", SubmenuIndexSavedSpools, k2_scene_main_menu_callback, app);
     submenu_add_item(submenu, "Format / Erase Tag", SubmenuIndexFormat, k2_scene_main_menu_callback, app);
     submenu_add_item(submenu, "About", SubmenuIndexAbout, k2_scene_main_menu_callback, app);
+    submenu_add_item(submenu, "Exit", SubmenuIndexExit, k2_scene_main_menu_callback, app);
 
     submenu_set_selected_item(submenu, scene_manager_get_scene_state(app->scene_manager, K2SceneMainMenu));
 
@@ -42,7 +44,11 @@ bool k2_scene_main_menu_on_event(void* context, SceneManagerEvent event) {
     K2RfidApp* app = context;
     bool consumed = false;
 
-    if (event.type == SceneManagerEventTypeCustom) {
+    if (event.type == SceneManagerEventTypeBack) {
+        scene_manager_stop(app->scene_manager);
+        view_dispatcher_stop(app->view_dispatcher);
+        consumed = true;
+    } else if (event.type == SceneManagerEventTypeCustom) {
         scene_manager_set_scene_state(app->scene_manager, K2SceneMainMenu, event.event);
         consumed = true;
         switch (event.event) {
@@ -69,6 +75,10 @@ bool k2_scene_main_menu_on_event(void* context, SceneManagerEvent event) {
             break;
         case SubmenuIndexAbout:
             scene_manager_next_scene(app->scene_manager, K2SceneAbout);
+            break;
+        case SubmenuIndexExit:
+            scene_manager_stop(app->scene_manager);
+            view_dispatcher_stop(app->view_dispatcher);
             break;
         default:
             consumed = false;

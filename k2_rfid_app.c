@@ -47,7 +47,11 @@ static bool k2_rfid_app_custom_event_callback(void* context, uint32_t event) {
 static bool k2_rfid_app_back_event_callback(void* context) {
     furi_assert(context);
     K2RfidApp* app = context;
-    return scene_manager_handle_back_event(app->scene_manager);
+    if(!scene_manager_handle_back_event(app->scene_manager)) {
+        scene_manager_stop(app->scene_manager);
+        view_dispatcher_stop(app->view_dispatcher);
+    }
+    return true;
 }
 
 static void k2_rfid_app_tick_event_callback(void* context) {
